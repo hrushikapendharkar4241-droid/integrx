@@ -1,0 +1,5 @@
+# IntegrX scheduled checks (alternative to the systemd timer). Install with: crontab deploy/cron/integrx.cron
+# m   h  dom mon dow  command
+*/5   *  *   *   *    cd /opt/integrx && scripts/health_check.sh >> logs/health.log 2>&1
+0     8  *   *   1-5  cd /opt/integrx && for c in deploy/certs/*_cert.pem; do pdoc as2 -b "$c"; done >> logs/cert-report.log 2>&1
+*/15  *  *   *   *    cd /opt/integrx && scripts/find_errors.sh "$(date -u +\%F)" logs --summary >> logs/error-summary.log 2>&1

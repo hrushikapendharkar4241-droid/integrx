@@ -1,0 +1,18 @@
+[Unit]
+Description=IntegrX SFTP folder watcher
+After=network-online.target integrx-api.service
+
+[Service]
+Type=simple
+User=integrx
+WorkingDirectory=/opt/integrx
+EnvironmentFile=/opt/integrx/.env
+ExecStart=/opt/integrx/.venv/bin/python -m integrx.sftp_watcher
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/integrx/data /opt/integrx/logs
+
+[Install]
+WantedBy=multi-user.target

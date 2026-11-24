@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IntegrX Support Console</title>
+<style>
+  :root { --ink:#1d2330; --quiet:#5d6675; --line:#dfe3ea; --bg:#f6f7f9; --err:#b42318; --warn:#b54708; --ok:#067647; --accent:#2557d6; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color:var(--ink); background:var(--bg); }
+  header { display:flex; gap:16px; align-items:center; padding:12px 20px; background:#fff; border-bottom:1px solid var(--line); }
+  header h1 { font-size:16px; margin:0; }
+  header input { width:240px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; }
+  main { display:grid; grid-template-columns: 1.1fr 1fr; gap:16px; padding:16px 20px; }
+  section { background:#fff; border:1px solid var(--line); border-radius:8px; padding:14px; min-width:0; }
+  h2 { font-size:14px; margin:0 0 10px; }
+  .cards { display:flex; gap:10px; grid-column:1 / -1; }
+  .card { flex:1; background:#fff; border:1px solid var(--line); border-radius:8px; padding:10px 14px; }
+  .card b { display:block; font-size:22px; }
+  .card span { color:var(--quiet); font-size:12px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:6px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--quiet); font-weight:600; font-size:12px; }
+  tr.click { cursor:pointer; } tr.click:hover { background:#f0f4ff; }
+  .FAILED, .ERROR { color:var(--err); font-weight:600; } .WARNING { color:var(--warn); }
+  .PROCESSED, .REPLAYED, .RESOLVED { color:var(--ok); font-weight:600; }
+  .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:12px; }
+  .timeline div { padding:3px 0; border-bottom:1px dashed var(--line); }
+  button { padding:5px 10px; border:1px solid var(--line); border-radius:6px; background:#fff; cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  pre { white-space:pre-wrap; background:var(--bg); padding:8px; border-radius:6px; margin:6px 0; }
+  .muted { color:var(--quiet); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>IntegrX Support Console</h1>
+  <label class="muted">Admin key <input id="key" type="password" placeholder="X-Admin-Key"></label>
+  <button onclick="refresh()">Refresh</button>
+  <span id="msg" class="muted"></span>
+</header>
+<main>
+  <div class="cards" id="cards"></div>
+  <section>
+    <h2>Recent transactions</h2>
+    <table><thead><tr><th>Transaction</th><th>Partner</th><th>Channel</th><th>Doc</th><th>Status</th><th>Failure</th></tr></thead>
+      <tbody id="txns"></tbody></table>
+  </section>
+  <section>
+    <h2 id="detail-title">Select a transaction or incident</h2>
+    <div id="detail" class="muted">The timeline, evidence and actions appear here.</div>
+  </section>
+  <section style="grid-column:1 / -1">
+    <h2>Incidents</h2>
+    <table><thead><tr><th>Incident</th><th>Severity</th><th>Partner</th><th>Title</th><th>Txns</th><th>Ticket</th><th>Draft</th><th>Status</th></tr></thead>
+      <tbody id="incidents"></tbody></table>
+  </section>
+</main>
+<script>
+const keyInput = document.getElementById('key');
+try { keyInput.value = sessionStorage.getItem('integrx-key') || ''; } catch (e) {}
+keyInput.addEventListener('change', () => { try { sessionStorage.setItem('integrx-key', keyInput.value); } catch (e) {} refresh(); });
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, { ...opts, headers: { 'X-Admin-Key': keyInput.value, 'Content-Type': 'application/json', ...(opts.headers || {}) } });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.detail || r.statusText);
+  return body;
+}
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function say(t) { document.getElementById('msg').textContent = t; }
+
+async function refresh() {
+  try {
+    const [st, txns, incs] = await Promise.all([api('/api/v1/stats'), api('/api/v1/transactions?limit=40'), api('/api/v1/incidents')]);
+    document.getElementById('cards').innerHTML = [
+      ['Transactions (24h)', st.transactions], ['Success rate', st.success_rate == null ? '-' : st.success_rate + '%'],
+      ['Failed', st.by_status.FAILED || 0], ['Open incidents', st.open_incidents],
+      ['Top failure', st.top_failures[0] ? st.top_failures[0].code : '-']]
+      .map(([k, v]) => `<div class="card"><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join('');
+    document.getElementById('txns').innerHTML = txns.map(t => `<tr class="click" onclick="showTxn('${t.txn_id}')">
+      <td class="mono">${t.txn_id}</td><td>${esc(t.partner_id)}</td><td>${t.channel}</td><td>${esc(t.doc_type || t.fmt || '')} ${esc(t.business_key || '')}</td>
+      <td class="${t.status}">${t.status}</td><td class="mono">${esc(t.failure_code || '')}</td></tr>`).join('');
+    document.getElementById('incidents').innerHTML = incs.map(i => `<tr class="click" onclick="showIncident('${i.key}')">
+      <td class="mono">${i.key}</td><td>${i.severity}</td><td>${esc(i.partner_id)}</td><td>${esc(i.title)}</td><td>${i.transactions.length}</td>
+      <td class="mono">${esc(i.jira_key || '')}</td><td>${esc(i.draft_status || '')}</td><td class="${i.status}">${i.status}</td></tr>`).join('');
+    say('Updated ' + new Date().toLocaleTimeString());
+  } catch (e) { say(e.message); }
+}
+
+async function showTxn(id) {
+  const t = await api('/api/v1/transactions/' + id);
+  document.getElementById('detail-title').textContent = id + '  ' + t.status;
+  const c = t.classification;
+  document.getElementById('detail').innerHTML = `
+    <div>${esc(t.partner_id)} via ${t.channel} · ${esc(t.filename || '')} · ${esc(t.fmt || '')} ${esc(t.doc_type || '')} ${esc(t.business_key || '')}</div>
+    ${c ? `<p><b class="FAILED">${c.code}</b> (${c.severity}) ${esc(c.title)}<br><span class="muted">Impact: ${esc(c.customer_impact)}</span><br>
+      Runbook: <span class="mono">${esc(c.runbook)}</span> · Replay fixes it: ${c.replayable ? 'yes' : 'no, partner must resend'}</p>` : ''}
+    ${t.replay_of ? `<p class="muted">Replay of ${t.replay_of}</p>` : ''}${t.replays.length ? `<p class="muted">Replayed as ${t.replays.join(', ')}</p>` : ''}
+    <div class="timeline mono">${t.timeline.map(e => `<div class="${e.level}">${e.ts.slice(11, 23)} ${e.level.padEnd(7)} ${esc(e.stage)}: ${esc(e.message)}</div>`).join('')}</div>
+    ${t.status === 'FAILED' ? `<div class="row"><button class="primary" onclick="replayTxn('${id}')">Replay (requires approver)</button></div>` : ''}`;
+}
+
+async function replayTxn(id) {
+  const who = prompt('Your name (approver)'); if (!who) return;
+  const reason = prompt('Reason for replay (e.g. "order-service recovered at 12:40")'); if (!reason) return;
+  try { const r = await api(`/api/v1/transactions/${id}/replay`, { method: 'POST', body: JSON.stringify({ approved_by: who, reason }) });
+        say(`Replayed as ${r.txn_id}: ${r.status}`); refresh(); showTxn(r.txn_id); } catch (e) { say(e.message); }
+}
+
+async function showIncident(key) {
+  const i = await api('/api/v1/incidents/' + key);
+  const d = i.ai_draft;
+  document.getElementById('detail-title').textContent = `${key}  ${i.severity}  ${i.status}`;
+  document.getElementById('detail').innerHTML = `
+    <div><b>${esc(i.title)}</b></div><div class="muted">Runbook ${esc(i.runbook)} · Ticket ${esc(i.jira_key)} · ${i.transactions.length} transaction(s): ${i.transactions.map(t => `<a href="#" onclick="showTxn('${t}');return false">${t}</a>`).join(', ')}</div>
+    <div class="row"><button onclick="act('${key}','triage')">AI triage draft</button>
+      ${i.draft_status === 'DRAFT' ? `<button class="primary" onclick="approve('${key}')">Approve draft</button>` : ''}
+      ${i.draft_status === 'APPROVED' ? `<button class="primary" onclick="act('${key}','send-reply')">Send approved reply</button>` : ''}
+      ${i.status === 'OPEN' ? `<button onclick="resolveInc('${key}')">Resolve</button>` : ''}</div>
+    ${d ? `<p><b>Draft</b> (${esc(d.generated_by)}, confidence ${esc(d.confidence)}, status ${esc(i.draft_status)}${i.approved_by ? ', approved by ' + esc(i.approved_by) : ''})</p>
+      <p>${esc(d.summary)}</p><p><b>Likely root cause:</b> ${esc(d.likely_root_cause)}</p>
+      <ol>${(d.recommended_actions || []).map(a => `<li>${esc(a)}</li>`).join('')}</ol>
+      <b>Customer reply</b><pre>${esc(d.customer_reply)}</pre>` : ''}
+    ${i.resolution ? `<p class="RESOLVED">${esc(i.resolution)}</p>` : ''}`;
+}
+
+async function act(key, action) {
+  try { await api(`/api/v1/incidents/${key}/${action}`, { method: 'POST' }); say(`${action} done for ${key}`); refresh(); showIncident(key); }
+  catch (e) { say(e.message); }
+}
+async function approve(key) {
+  const who = prompt('Your name (approver)'); if (!who) return;
+  try { await api(`/api/v1/incidents/${key}/approve`, { method: 'POST', body: JSON.stringify({ approver: who }) }); refresh(); showIncident(key); }
+  catch (e) { say(e.message); }
+}
+async function resolveInc(key) {
+  const who = prompt('Your name'); if (!who) return;
+  const res = prompt('Resolution (what fixed it)'); if (!res) return;
+  try { await api(`/api/v1/incidents/${key}/resolve`, { method: 'POST', body: JSON.stringify({ resolution: res, by: who }) }); refresh(); showIncident(key); }
+  catch (e) { say(e.message); }
+}
+refresh();
+setInterval(refresh, 15000);
+</script>
+</body>
+</html>

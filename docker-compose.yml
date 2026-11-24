@@ -1,0 +1,133 @@
+# IntegrX local stack.
+#   docker compose up -d --build                                  # core: API, watcher, order-service, SFTP, PostgreSQL
+#   docker compose --profile observability up -d                  # + Elasticsearch, Kibana, Filebeat, ElastAlert2
+# Needs about 2 GB RAM for the core and about 4 GB more with observability.
+# Run `python scripts/setup_local.py` once before the first start (certificates and folders).
+
+x-integrx: &integrx
+  build:
+    context: ..
+    dockerfile: integrx/deploy/Dockerfile
+  image: integrx:local
+  env_file: .env
+  environment:
+    INTEGRX_DB_URL: postgresql+psycopg://integrx:integrx@postgres:5432/integrx
+    INTEGRX_DOWNSTREAM_URL: http://order-service:8090/api/documents
+    INTEGRX_LOG_FILE: /app/logs/integrx.jsonl
+    INTEGRX_SFTP_ROOT: /app/data/sftp
+  volumes:
+    - ./data:/app/data
+    - ./logs:/app/logs
+    - ./deploy:/app/deploy:ro
+  depends_on:
+    postgres:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: integrx
+      POSTGRES_PASSWORD: integrx
+      POSTGRES_DB: integrx
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U integrx"]
+      interval: 5s
+      retries: 20
+
+  api:
+    <<: *integrx
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+
+  watcher:
+    <<: *integrx
+    command: ["python", "-m", "integrx.sftp_watcher"]
+
+  order-service:
+    <<: *integrx
+    command: ["uvicorn", "integrx.downstream_stub:app", "--host", "0.0.0.0", "--port", "8090"]
+    environment:
+      ORDER_SERVICE_SLOW_SECONDS: "20"
+    ports:
+      - "8090:8090"
+    depends_on: []
+
+  sftp:
+    image: atmoz/sftp:alpine
+    # user:password:uid:gid:dirs  (demo passwords; see partner_sim/partners.py)
+    command: >
+      acme01:acme01-sftp-pass:1001:100:upload,download
+      mediline:mediline-sftp-pass:1002:100:upload,download
+      retailco:retailco-sftp-pass:1003:100:upload,download
+    ports:
+      - "2222:22"
+    volumes:
+      - ./data/sftp/acme01/upload:/home/acme01/upload
+      - ./data/sftp/acme01/download:/home/acme01/download
+      - ./data/sftp/mediline/upload:/home/mediline/upload
+      - ./data/sftp/mediline/download:/home/mediline/download
+      - ./data/sftp/retailco/upload:/home/retailco/upload
+      - ./data/sftp/retailco/download:/home/retailco/download
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------- observability (optional profile)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+    profiles: ["observability"]
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"   # local demo only; never disable security on a shared network
+      ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      retries: 30
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.17.0
+    profiles: ["observability"]
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.17.0
+    profiles: ["observability"]
+    user: root
+    command: ["filebeat", "-e", "--strict.perms=false"]
+    volumes:
+      - ./deploy/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - ./logs:/logs:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  elastalert:
+    image: jertel/elastalert2:latest
+    profiles: ["observability"]
+    volumes:
+      - ./deploy/elastalert/config.yaml:/opt/elastalert/config.yaml:ro
+      - ./deploy/elastalert/rules:/opt/elastalert/rules:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  esdata:

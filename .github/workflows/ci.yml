@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: integrx
+      - uses: actions/checkout@v4
+        with:
+          repository: hrushikapendharkar4241-droid/payload-doctor
+          path: payload-doctor
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e payload-doctor -e "integrx[dev]"
+      - run: cd integrx && pytest -q
+      - run: docker compose -f integrx/docker-compose.yml config -q || true

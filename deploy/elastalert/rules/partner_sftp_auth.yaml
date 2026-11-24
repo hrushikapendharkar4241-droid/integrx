@@ -1,0 +1,17 @@
+# Repeated SFTP login failures seen by the partner simulator (in production: the SFTP server's auth log).
+name: Partner SFTP authentication failures
+type: frequency
+index: integrx-*
+num_events: 3
+timeframe:
+  minutes: 10
+query_key: partner
+filter:
+  - query:
+      query_string:
+        query: 'stage:sftp_auth_failed'
+alert_subject: "IntegrX: partner {0} cannot log in to SFTP"
+alert_subject_args: [partner]
+alert_text: "Follow RB-03-sftp-authentication-failure."
+alert:
+  - debug

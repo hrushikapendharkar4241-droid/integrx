@@ -1,0 +1,9 @@
+[Unit]
+Description=IntegrX health check (API, order-service, certificates, disk)
+
+[Service]
+Type=oneshot
+User=integrx
+WorkingDirectory=/opt/integrx
+EnvironmentFile=/opt/integrx/.env
+ExecStart=/opt/integrx/scripts/health_check.sh

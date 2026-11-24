@@ -1,0 +1,16 @@
+# Any AS2 certificate failure is a P1: every message from that partner is being rejected.
+name: IntegrX AS2 certificate failure
+type: any
+index: integrx-*
+realert:
+  minutes: 30
+query_key: partner
+filter:
+  - query:
+      query_string:
+        query: 'failure_code:AS2_CERT_INVALID AND stage:failed'
+alert_subject: "P1 IntegrX: AS2 certificate failure for {0}"
+alert_subject_args: [partner]
+alert_text: "Messages are rejected. Follow RB-01-as2-certificate-expiry."
+alert:
+  - debug

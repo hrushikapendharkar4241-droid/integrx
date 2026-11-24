@@ -1,0 +1,27 @@
+# Ships IntegrX and partner-simulator JSON logs to Elasticsearch, one index per day: integrx-YYYY.MM.DD
+filebeat.inputs:
+  - type: filestream
+    id: integrx-json
+    paths:
+      - /logs/*.jsonl
+    parsers:
+      - ndjson:
+          target: ""
+          overwrite_keys: true
+          add_error_key: true
+
+processors:
+  - drop_fields:
+      fields: ["agent", "ecs", "input", "log.offset"]
+      ignore_missing: true
+
+output.elasticsearch:
+  hosts: ["http://elasticsearch:9200"]
+  index: "integrx-%{+yyyy.MM.dd}"
+
+setup.ilm.enabled: false
+setup.template.name: "integrx"
+setup.template.pattern: "integrx-*"
+setup.template.settings:
+  index.number_of_shards: 1
+  index.number_of_replicas: 0

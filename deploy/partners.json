@@ -1,0 +1,10 @@
+{
+  "partners": [
+    {"id": "ACME01", "name": "Acme Health Distributors (synthetic)", "api_key": "acme01-demo-key",
+     "as2_id": "ACME01", "as2_cert": "./deploy/certs/acme01_cert.pem", "sftp_user": "acme01", "ack_format": "auto"},
+    {"id": "MEDILINE", "name": "MediLine Pharma (synthetic)", "api_key": "mediline-demo-key",
+     "as2_id": "MEDILINE", "as2_cert": "./deploy/certs/mediline_cert.pem", "sftp_user": "mediline", "ack_format": "auto"},
+    {"id": "RETAILCO", "name": "RetailCo Stores (synthetic)", "api_key": "retailco-demo-key",
+     "sftp_user": "retailco", "ack_format": "auto"}
+  ]
+}

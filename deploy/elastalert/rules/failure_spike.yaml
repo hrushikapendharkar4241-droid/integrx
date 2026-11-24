@@ -1,0 +1,20 @@
+# Five or more failed transactions from one partner within five minutes.
+name: IntegrX failure spike per partner
+type: frequency
+index: integrx-*
+num_events: 5
+timeframe:
+  minutes: 5
+query_key: partner
+filter:
+  - query:
+      query_string:
+        query: 'app:integrx AND stage:failed'
+alert_subject: "IntegrX: failure spike for partner {0}"
+alert_subject_args: [partner]
+alert_text: "5+ failed transactions in 5 minutes. Latest failure_code: {0}. Check the IntegrX console and the runbook."
+alert_text_args: [failure_code]
+alert:
+  - debug
+# To send to Slack instead, replace `debug` with `slack` and add:
+# slack_webhook_url: "https://hooks.slack.com/services/..."
