@@ -29,6 +29,14 @@ search integrx-timeline "IntegrX - Transaction timeline (filter by txn_id)" 'app
 search integrx-incidents "IntegrX - Incidents" 'stage:(incident_opened or incident_linked or incident_resolved)' '["incident","severity","failure_code","partner","message"]'
 search integrx-partner-errors "IntegrX - Partner-side errors" 'app:partner-sim and level:ERROR' '["partner","stage","message"]'
 
+DASH="$(dirname "$0")/integration-health-dashboard.ndjson"
+if [[ -f "$DASH" ]]; then
+  curl -fs -X POST "$KIBANA/api/saved_objects/_import?overwrite=true" -H "kbn-xsrf: true" -F "file=@$DASH" >/dev/null \
+    && echo "dashboard: IntegrX - Integration health (imported)"
+  echo "Done. Open Kibana -> Dashboards -> IntegrX - Integration health."
+  exit 0
+fi
+
 cat <<'TXT'
 
 Done. Open Kibana -> Discover and pick a saved search. To build the health dashboard

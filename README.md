@@ -101,7 +101,7 @@ cd integrx
 python scripts/setup_local.py                         # .env, folders, demo AS2 certificates
 docker compose up -d --build                          # API, watcher, order-service, SFTP, PostgreSQL (~2 GB RAM)
 docker compose --profile observability up -d          # + Elasticsearch, Kibana, Filebeat, ElastAlert2 (~4 GB more)
-bash deploy/kibana/setup.sh                           # data view + saved searches (then follow its dashboard steps)
+bash deploy/kibana/setup.sh                           # data view, saved searches and the "Integration health" dashboard
 ```
 
 | Service | URL |
@@ -129,6 +129,7 @@ python partner_sim/partners.py as2  ACME01 ../payload-doctor/samples/good/asn_85
 python scripts/generate_traffic.py --count 200 --bad-ratio 0.08                       # synthetic load
 scripts/inject_fault.sh downstream-timeout                                            # then send more documents
 python scripts/ticket_simulator.py                                                    # customer emails in data/tickets/inbox/
+bash scripts/run_drills.sh                                                            # guided: reproduce + resolve 15 failures, with evidence
 ```
 
 ## The 3-minute demo
@@ -199,16 +200,22 @@ pip install -e ../payload-doctor -e ".[dev]"
 pytest              # 25 tests: pipeline, real AS2 round trips, SFTP watcher, replay, governance, Jira/Gemini mocks, S3 (moto)
 ```
 
-## What was verified, and what was not
+## What has been verified
+
+Status as of 24 Nov 2026. Everything below was run on my own laptop (Windows 11, WSL2 Ubuntu, Docker Desktop) unless the "How" column says otherwise.
 
 | Verified | How |
 | --- | --- |
-| Full pipeline, acks, incidents, dedupe, replay, governance rules | 25 automated tests |
-| Real AS2: signing, encryption, signed MDNs, expired-certificate rejection, async MDN | Tests plus live runs with the partner simulator |
-| Services running together (API, order-service, watcher) | Live run without Docker: REST, AS2 and SFTP traffic, faults, `demo.sh` end to end, console screenshot |
-| Jira and Gemini calls | Against mocks; request shapes follow the public REST APIs |
-| `docker-compose.yml` | Syntax-checked with `docker compose config`. **Not yet run.** The build environment could not pull images, so the first `docker compose up` on your machine is the first real run. |
-| Filebeat, Kibana, ElastAlert2 configs | Written to the documented formats, **not yet run** against a live Elastic stack |
+| Pipeline, acks, incidents, dedupe, replay, governance rules | 25 automated tests (`pytest`) |
+| Full Docker Compose stack: PostgreSQL, API, SFTP watcher, order-service, SFTP server | `docker compose up -d --build`; API health `ok` |
+| Real traffic on all three channels | REST (HTTP 202, `PROCESSED`), AS2 (signed + encrypted, **MDN processed**), SFTP (login + upload on port 2222, picked up by the watcher) |
+| 997 / CONTRL acknowledgements | Written to `data/outbox/<partner>/` and the partner's SFTP `download/` folder |
+| Observability stack: Elasticsearch, Filebeat, Kibana | `--profile observability`; failed transactions searchable by `txn_id` and `failure_code` in Discover |
+| "IntegrX - Integration health" dashboard | 6 panels (transactions, failed, top failure types, errors over time, failures by partner, incidents), exported to `deploy/kibana/integration-health-dashboard.ndjson` |
+| Real AS2 cryptography, expired-certificate rejection, async MDN | Tests plus live runs with the partner simulator |
+| Jira and Gemini request shapes | Against mocks in the tests |
+
+**In progress:** the 15 failure drills (`scripts/run_drills.sh`, evidence in `evidence/`), ElastAlert2 alert firing, and a live Jira Cloud project. This table will be updated as each one is verified.
 
 ## Limitations
 
