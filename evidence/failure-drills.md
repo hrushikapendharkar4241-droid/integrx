@@ -23,3 +23,4 @@ Notes:
 - Drill 13 first run: the login worked after the credentials fix, but the sftp container was on a stale
   bind mount, so the watcher never saw the upload. Fixed with `docker compose up -d --force-recreate sftp`
   (now RB-03 step 6) and re-run with Jira connected.
+- Rows 1-12, 14 and 15 come from the first drill database. Drill 13 was re-run on the main database, so its INC-00009 is a different incident from row 9.

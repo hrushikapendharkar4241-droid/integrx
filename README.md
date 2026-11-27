@@ -202,7 +202,7 @@ pytest              # 26 tests: pipeline, real AS2 round trips, SFTP watcher, re
 
 ## What has been verified
 
-Status as of 24 Nov 2026. Everything below was run on my own laptop (Windows 11, WSL2 Ubuntu, Docker Desktop) unless the "How" column says otherwise.
+Status as of 27 Nov 2026. Everything below was run on my own laptop (Windows 11, WSL2 Ubuntu, Docker Desktop) unless the "How" column says otherwise.
 
 | Verified | How |
 | --- | --- |
@@ -213,9 +213,14 @@ Status as of 24 Nov 2026. Everything below was run on my own laptop (Windows 11,
 | Observability stack: Elasticsearch, Filebeat, Kibana | `--profile observability`; failed transactions searchable by `txn_id` and `failure_code` in Discover |
 | "IntegrX - Integration health" dashboard | 6 panels (transactions, failed, top failure types, errors over time, failures by partner, incidents), exported to `deploy/kibana/integration-health-dashboard.ndjson` |
 | Real AS2 cryptography, expired-certificate rejection, async MDN | Tests plus live runs with the partner simulator |
-| Jira and Gemini request shapes | Against mocks in the tests |
+| **15 failure drills** | `scripts/run_drills.sh`: each failure reproduced, diagnosed, fixed, verified `PROCESSED`, reply approved by a human, incident resolved. Results in [`evidence/failure-drills.md`](evidence/failure-drills.md) |
+| **ElastAlert2 alerting** | All 3 rules fired on 27 Nov 2026: AS2 certificate failure, failure spike, partner SFTP authentication failures |
+| **Jira Cloud** | Incidents open real tickets in the `SUP` project (SUP-1, SUP-2, SUP-3) |
+| Gemini request shape | Against a mock in the tests; without a key the rule-based drafts are used |
 
-**In progress:** the 15 failure drills (`scripts/run_drills.sh`, evidence in `evidence/`), ElastAlert2 alert firing, and a live Jira Cloud project. This table will be updated as each one is verified.
+Notes, so nothing is overstated:
+- Jira was connected after the first drill run, so drills 1-12, 14 and 15 used local tickets (`data/tickets/`). Drill 13 was re-run with Jira connected.
+- Drill 13 (SFTP login failure) failed its first run: the sftp container was on a stale bind mount, so the watcher never saw the corrected upload. The fix (`docker compose up -d --force-recreate sftp`) is now step 6 of [RB-03](runbooks/RB-03-sftp-authentication-failure.md).
 
 ## Limitations
 
