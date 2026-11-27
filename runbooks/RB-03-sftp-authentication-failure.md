@@ -52,6 +52,17 @@ jq -c 'select(.stage=="sftp_auth_failed")' logs/partner-sim.jsonl | tail -5
      -d '{"failure_code":"SFTP_AUTH_FAILURE","partner_id":"ACME01","detail":"Permission denied since 09:10 UTC","reported_by":"<you>"}'
    ```
 
+6. **Upload succeeds but the watcher never sees the file:** the sftp container can be attached to an old bind mount (for example after the stack was started from another copy of the repo, or after Docker Desktop restarted). Compare the two sides:
+   ```bash
+   docker compose exec sftp ls -la /home/retailco/upload
+   ls -la data/sftp/retailco/upload
+   ```
+   If they differ, recreate the container so it mounts the host folder again, then ask the partner to retry:
+   ```bash
+   docker compose up -d --force-recreate sftp
+   ```
+   Seen in the failure drills on 27 Nov 2026: the login worked after the credentials were fixed, but the file stayed inside the stale container until `sftp` was recreated.
+
 ## Verify
 
 - The partner uploads a test file. The watcher picks it up within about 10 seconds (two polls) and creates a transaction with `channel = SFTP`.

@@ -197,7 +197,7 @@ If any of these asks for a payment card, stop: the project works fully without t
 
 ```bash
 pip install -e ../payload-doctor -e ".[dev]"
-pytest              # 25 tests: pipeline, real AS2 round trips, SFTP watcher, replay, governance, Jira/Gemini mocks, S3 (moto)
+pytest              # 26 tests: pipeline, real AS2 round trips, SFTP watcher, replay, governance, Jira/Gemini mocks, S3 (moto)
 ```
 
 ## What has been verified
@@ -206,7 +206,7 @@ Status as of 24 Nov 2026. Everything below was run on my own laptop (Windows 11,
 
 | Verified | How |
 | --- | --- |
-| Pipeline, acks, incidents, dedupe, replay, governance rules | 25 automated tests (`pytest`) |
+| Pipeline, acks, incidents, dedupe, replay, governance rules | 26 automated tests (`pytest`) |
 | Full Docker Compose stack: PostgreSQL, API, SFTP watcher, order-service, SFTP server | `docker compose up -d --build`; API health `ok` |
 | Real traffic on all three channels | REST (HTTP 202, `PROCESSED`), AS2 (signed + encrypted, **MDN processed**), SFTP (login + upload on port 2222, picked up by the watcher) |
 | 997 / CONTRL acknowledgements | Written to `data/outbox/<partner>/` and the partner's SFTP `download/` folder |

@@ -56,35 +56,68 @@ def build_facts(inc: Incident) -> dict:
     }
 
 
+# What we ask the partner to do, for failures the partner has to fix. Failures not listed here and not
+# replayable are payload problems, so the default ask is a corrected document.
+PARTNER_ASK = {
+    "SFTP_AUTH_FAILURE": ("Could you please check that your SFTP client uses the username and password (or SSH key) "
+                          "we agreed, and try the upload again? If your credentials changed recently, please send "
+                          "the new public key or ask us for a reset over the agreed secure channel."),
+    "AS2_CERT_INVALID": ("Could you please send us your renewed AS2 certificate? Once it is installed we will ask "
+                         "you to resend the affected message."),
+    "AS2_SECURITY_ERROR": ("Could you please confirm which certificate you used to sign and encrypt the message? "
+                           "Once the certificates match we will ask you to resend it."),
+    "AS2_MDN_NOT_DELIVERED": ("Your document was received and processed. Our receipt (MDN) could not be delivered "
+                              "to your MDN URL, so please do not resend the document; could you check that your "
+                              "MDN endpoint is reachable?"),
+    "PARTNER_REJECTED_ACK": ("Could you please share the reason your system rejected our document, so we can "
+                             "correct it and send it again?"),
+}
+
+ACTIONS = {
+    "DOWNSTREAM_TIMEOUT": ["Check order-service health (curl its /health endpoint) and its recent logs",
+                           "Confirm network path and latency from IntegrX to order-service",
+                           "Once healthy, replay the affected transactions from the archive",
+                           "Verify each replay reaches PROCESSED and the 997 is sent"],
+    "AS2_CERT_INVALID": ["Run pdoc as2 on the partner certificate to confirm the expiry date",
+                         "Request the renewed certificate from the partner and install it",
+                         "Ask the partner to resend once the new certificate is installed (do not replay: the "
+                         "original signature could not be verified)",
+                         "Add the new expiry date to the certificate calendar"],
+    "SFTP_AUTH_FAILURE": ["Check the sftp server log for 'Failed password' or 'Invalid user' (RB-03)",
+                          "Confirm the partner's username and credentials match the server configuration",
+                          "Check the sftp container's upload folder is the host folder the watcher reads",
+                          "Ask the partner to retry, then verify a new SFTP transaction reaches PROCESSED"],
+    "AS2_MDN_NOT_DELIVERED": ["Confirm the document itself reached PROCESSED (no replay needed)",
+                              "Check the partner MDN URL and our outbound connectivity (RB-02)",
+                              "Resend the MDN once the endpoint is reachable",
+                              "Tell the partner not to resend, to avoid a duplicate"],
+}
+
+
 def rule_based_draft(facts: dict) -> dict:
     c = get_classification(facts["failure_code"])
     first = facts["transactions"][0] if facts["transactions"] else {}
     ref = first.get("business_key") or first.get("txn_id", "")
     n = facts["affected_transactions"]
-    actions = {
-        "DOWNSTREAM_TIMEOUT": ["Check order-service health (curl its /health endpoint) and its recent logs",
-                               "Confirm network path and latency from IntegrX to order-service",
-                               "Once healthy, replay the affected transactions from the archive",
-                               "Verify each replay reaches PROCESSED and the 997 is sent"],
-        "AS2_CERT_INVALID": ["Run pdoc as2 on the partner certificate to confirm the expiry date",
-                             "Request the renewed certificate from the partner and install it",
-                             "Ask the partner to resend once the new certificate is installed (do not replay: the "
-                             "original signature could not be verified)",
-                             "Add the new expiry date to the certificate calendar"],
-    }.get(c.code, ["Follow the runbook steps for this failure code",
-                   "Confirm the root cause from the timeline evidence",
-                   "Fix or request a corrected document, then verify processing"])
+    actions = ACTIONS.get(c.code, ["Follow the runbook steps for this failure code",
+                                   "Confirm the root cause from the timeline evidence",
+                                   "Fix or request a corrected document, then verify processing"])
+    if c.code == "SFTP_AUTH_FAILURE":
+        opening = "We can see that your SFTP logins to our server are being refused. "
+    else:
+        opening = f"We have identified an issue affecting your document {ref}. "
+    if c.replayable:
+        ask = "We are fixing this on our side and will reprocess the document; no action is needed from you."
+    else:
+        ask = PARTNER_ASK.get(c.code, "Could you please review the document and send a corrected version?")
     return {
         "summary": f"{n} transaction(s) from {facts['partner']} failed with {c.code}: {c.title.lower()}.",
         "likely_root_cause": first.get("failure_detail") or c.title,
         "evidence": facts["first_transaction_timeline"][-3:],
         "recommended_actions": actions,
         "customer_reply": (
-            f"Hello {facts['partner']} team,\n\nWe have identified an issue affecting your document {ref}. "
-            f"{c.customer_impact} "
-            + ("We are fixing this on our side and will reprocess the document; no action is needed from you."
-               if c.replayable else "Could you please review the document and send a corrected version?")
-            + "\n\nWe will confirm once it is resolved.\n\nRegards,\nIntegration Support"),
+            f"Hello {facts['partner']} team,\n\n{opening}{c.customer_impact} {ask}"
+            "\n\nWe will confirm once it is resolved.\n\nRegards,\nIntegration Support"),
         "confidence": "medium",
         "generated_by": "rules",
     }

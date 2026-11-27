@@ -115,6 +115,20 @@ def test_triage_requires_human_approval(client):
     assert res["status"] == "RESOLVED"
 
 
+def test_rule_based_draft_asks_for_the_right_fix(client):
+    # SFTP login failures: the partner must fix credentials, not send a "corrected document"
+    r = client.post("/api/v1/incidents", headers=ADMIN, json={
+        "failure_code": "SFTP_AUTH_FAILURE", "partner_id": "RETAILCO",
+        "detail": "3 refused logins", "reported_by": "Hrushika"}).json()
+    reply = client.post(f"/api/v1/incidents/{r['key']}/triage", headers=ADMIN).json()["ai_draft"]["customer_reply"]
+    assert "credentials" in reply and "corrected version" not in reply
+    # payload failures still ask for a corrected document
+    t = post(client, "ACME01", "k-acme", "bad/epcis_no_owner.xml").json()
+    key = client.get(f"/api/v1/transactions/{t['txn_id']}", headers=ADMIN).json()["incident"]
+    reply = client.post(f"/api/v1/incidents/{key}/triage", headers=ADMIN).json()["ai_draft"]["customer_reply"]
+    assert "corrected version" in reply
+
+
 def test_gemini_draft_never_sees_payload(client, monkeypatch):
     from integrx import ai_triage
     from integrx.config import get_settings
